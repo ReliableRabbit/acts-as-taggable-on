@@ -69,9 +69,9 @@ module ActsAsTaggableOn::Taggable
       #   User.tagged_with("awesome", "cool", :owned_by => foo ) # Users that are tagged with just awesome and cool by 'foo'
       def tagged_with(tags, options = {})
         tag_list = ActsAsTaggableOn::TagList.from(tags)
-        empty_result = scoped(:conditions => "1 = 0")
+        empty_result = options[:conditions] || "1 = 0"
 
-        return empty_result if tag_list.empty?
+        return scoped(:condtions => empty_result) if tag_list.empty?
 
         joins = []
         conditions = []
@@ -97,7 +97,7 @@ module ActsAsTaggableOn::Taggable
             tags = ActsAsTaggableOn::Tag.named_any(tag_list)
           end
 
-          return scoped(:conditions => "1 = 0") unless tags.length > 0
+          return scoped(:conditions => empty_result) if tags.length <= 0
 
           # setup taggings alias so we can chain, ex: items_locations_taggings_awesome_cool_123
           # avoid ambiguous column name
@@ -154,11 +154,18 @@ module ActsAsTaggableOn::Taggable
           group_columns = ActsAsTaggableOn::Tag.using_postgresql? ? grouped_column_names_for(self) : "#{table_name}.#{primary_key}"
           group = "#{group_columns} HAVING COUNT(#{taggings_alias}.taggable_id) = #{tags.size}"
         end
+        
+        cconditions = conditions.join(" AND ")
+        user_condition = options.delete(:conditions)
+        if user_condition.present?
+          joinment = options.delete(:joinment) || " OR "
+          cconditions += joinment + user_condition
+        end
 
         scoped(:select     => select_clause,
                :joins      => joins.join(" "),
                :group      => group,
-               :conditions => conditions.join(" AND "),
+               :conditions => cconditions,
                :order      => options[:order],
                :readonly   => false)
       end
